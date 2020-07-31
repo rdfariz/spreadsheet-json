@@ -16,6 +16,13 @@ app.use(function(req, res, next) {
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+app.get('/', (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: 'Successfully running'
+  });
+})
+
 app.get('/api', (req, res, next) => {
   var id = req.query.id,
     sheet = req.query.sheet || 1,
@@ -25,58 +32,65 @@ app.get('/api', (req, res, next) => {
     showColumns = req.query.columns || true,
     url = 'https://spreadsheets.google.com/feeds/list/' + id + '/' + sheet + '/public/values?alt=json';
 
-  request(url, function (error, response, body) {
-    if (!error && response.statusCode === 200) {
-      var data = JSON.parse(response.body);
-      var responseObj = {};
-      var rows = [];
-      var columns = {};
-      if (data && data.feed && data.feed.entry) {
-        for (var i = 0; i < data.feed.entry.length; i++) {
-          var entry = data.feed.entry[i];
-          var keys = Object.keys(entry);
-          var newRow = {};
-          var queried = false;
-          for (var j = 0; j < keys.length; j++) {
-            var gsxCheck = keys[j].indexOf('gsx$');
-            if (gsxCheck > -1) {
-              var key = keys[j];
-              var name = key.substring(4);
-              var content = entry[key];
-              var value = content.$t;
-              if (value.toLowerCase().indexOf(query.toLowerCase()) > -1) {
-                queried = true;
-              }
-              if (useIntegers === true && !isNaN(value)) {
-                value = Number(value);
-              }
-              newRow[name] = value;
-              if (queried === true) {
-                if (!columns.hasOwnProperty(name)) {
-                  columns[name] = [];
-                  columns[name].push(value);
-                } else {
-                  columns[name].push(value);
+  if (!id) {
+    return res.status(403).json({
+      success: false,
+      message: 'id required!'
+    });
+  } else {
+    request(url, function (error, response, body) {
+      if (!error && response.statusCode === 200) {
+        var data = JSON.parse(response.body);
+        var responseObj = {};
+        var rows = [];
+        var columns = {};
+        if (data && data.feed && data.feed.entry) {
+          for (var i = 0; i < data.feed.entry.length; i++) {
+            var entry = data.feed.entry[i];
+            var keys = Object.keys(entry);
+            var newRow = {};
+            var queried = false;
+            for (var j = 0; j < keys.length; j++) {
+              var gsxCheck = keys[j].indexOf('gsx$');
+              if (gsxCheck > -1) {
+                var key = keys[j];
+                var name = key.substring(4);
+                var content = entry[key];
+                var value = content.$t;
+                if (value.toLowerCase().indexOf(query.toLowerCase()) > -1) {
+                  queried = true;
+                }
+                if (useIntegers === true && !isNaN(value)) {
+                  value = Number(value);
+                }
+                newRow[name] = value;
+                if (queried === true) {
+                  if (!columns.hasOwnProperty(name)) {
+                    columns[name] = [];
+                    columns[name].push(value);
+                  } else {
+                    columns[name].push(value);
+                  }
                 }
               }
             }
+            if (queried === true) {
+              rows.push(newRow);
+            }
           }
-          if (queried === true) {
-            rows.push(newRow);
+          if (showColumns === true) {
+            responseObj['columns'] = columns;
           }
+          if (showRows === true) {
+            responseObj['rows'] = rows;
+          }
+          return res.status(200).json(responseObj);
+        } else {
+          return res.status(response.statusCode).json(error);
         }
-        if (showColumns === true) {
-          responseObj['columns'] = columns;
-        }
-        if (showRows === true) {
-          responseObj['rows'] = rows;
-        }
-        return res.status(200).json(responseObj);
-      } else {
-        return res.status(response.statusCode).json(error);
       }
-    }
-  });
+    });
+  }
 });
 
 app.use(function(err, req, res, next) {
